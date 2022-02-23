@@ -43,10 +43,13 @@ class WordleGame:
     solution = ""
     solution_index = None
 
-    def __init__(self):
+    def __init__(self, guesses_made=None):
         """Set up guess list and pick a solution."""
         self.solution, self.solution_index = self.pick_solution()
-        self.guesses_made = []
+        if guesses_made:
+            self.guesses_made = guesses_made
+        else:
+            self.guesses_made = []
         print(f"Solution is #{self.solution_index}:'{self.solution}'")
 
     def pick_solution(self, n=None):
@@ -98,108 +101,116 @@ class WordleGame:
         return result
 
 
-sg.theme("DarkBlack1")
-layout = [
-    [
-        sg.Text("Guess a word"),
-        sg.Input(
-            key="-IN-",
-            size=(10, 1),
-            background_color=Colors.lightGray,
-            enable_events=True,
-        ),
-        sg.Button("Submit", disabled=False, bind_return_key=True),
-        sg.Button("Reset"),
-    ],
-    [
-        sg.Multiline(
-            size=(7, 6),
-            font=("Consolas", 50),
-            justification="c",
-            disabled=True,
-            write_only=True,
-            no_scrollbar=True,
-            background_color=Colors.background,
-            key="-ML-",
-        )
-    ],
-]
-window = sg.Window("Wordle", layout, element_justification="c").Finalize()
-textbox_element = window["-IN-"]
-display_element = window["-ML-"]
+class WordleUI:
+    """A PySimplGUI UI for a Wordle game."""
 
+    window = None
+    layout = [
+        [
+            sg.Text("Guess a word"),
+            sg.Input(
+                key="-IN-",
+                size=(10, 1),
+                background_color=Colors.lightGray,
+                enable_events=True,
+            ),
+            sg.Button("Submit", disabled=False, bind_return_key=True),
+            sg.Button("Reset"),
+        ],
+        [
+            sg.Multiline(
+                size=(7, 6),
+                font=("Consolas", 50),
+                justification="c",
+                disabled=True,
+                write_only=True,
+                no_scrollbar=True,
+                background_color=Colors.background,
+                key="-ML-",
+            )
+        ],
+    ]
 
-def draw_letter(l, color=Colors.darkGray):
-    """Draw a letter to the multiline element with the specified
-    background color.
-    """
-    if l == "\n":
-        display_element.update(
-            "\n", background_color_for_value=Colors.background, append=True
-        )
-    else:
-        display_element.update(
-            l.upper(),
-            text_color_for_value=Colors.white,
-            background_color_for_value=color,
-            append=True,
-        )
+    def __init__(self):
+        sg.theme("DarkBlack1")
+        self.window = sg.Window(
+            "Wordle", self.layout, element_justification="c"
+        ).Finalize()
+        self.textbox_element = self.window["-IN-"]
+        self.display_element = self.window["-ML-"]
 
-
-def draw_word(word):
-    """Draw a full word to the multiline element."""
-    draw_letter(" ", Colors.background)
-    for i in word:
-        if len(i) < 2:
-            draw_letter(i[0])
+    def draw_letter(self, l, color=Colors.darkGray):
+        """Draw a letter to the multiline element with the specified
+        background color.
+        """
+        if l == "\n":
+            self.display_element.update(
+                "\n", background_color_for_value=Colors.background, append=True
+            )
         else:
-            draw_letter(i[0], Colors().colormap(i[1]))
-    draw_letter(" \n", Colors.background)
+            self.display_element.update(
+                l.upper(),
+                text_color_for_value=Colors.white,
+                background_color_for_value=color,
+                append=True,
+            )
 
+    def draw_word(self, word):
+        """Draw a full word to the multiline element."""
+        self.draw_letter(" ", Colors.background)
+        for i in word:
+            if len(i) < 2:
+                self.draw_letter(i[0])
+            else:
+                self.draw_letter(i[0], Colors().colormap(i[1]))
+        self.draw_letter(" \n", Colors.background)
 
-def validate_user_input(text_element_key):
-    """Limit user input to this field to 5 characters and remove any
-    invalid characters on the fly.
-    """
-    val = values[text_element_key]
-    element = window[text_element_key]
-    if not val:
-        return
-    if not val[-1].isalpha():
-        element.update(val[:-1])
-    if len(val) > 5:
-        element.update(val[:-1])
+    def validate_user_input(self, text_element_key):
+        """Limit user input to this field to 5 characters and remove any
+        invalid characters on the fly.
+        """
+        element = self.window[text_element_key]
+        val = element.get()
+        if not val:
+            return
+        if not val[-1].isalpha():
+            element.update(val[:-1])
+        if len(val) > 5:
+            element.update(val[:-1])
 
+    def handle_submit(self, guess, game_handle):
+        """Make sure the guess is the right length and is a valid word, then
+        submit it to the game controller.
+        """
+        if len(guess) < 5:
+            sg.popup("Too few letters!")
+        elif len(guess) > 5:
+            sg.popup("Too many letters!")
+        elif not game_handle.is_valid_guess(guess):
+            sg.popup("Not a valid word!")
+        else:
+            self.draw_word(game_handle.evaluate_guess(guess))
+            if game_handle.is_solution(guess):
+                sg.popup("You got it!")
+            elif game_handle.game_over():
+                sg.popup("Try again!")
 
-def handle_submit(guess, game_handle):
-    """Make sure the guess is the right length and is a valid word, then
-    submit it to the game controller.
-    """
-    if len(guess) < 5:
-        sg.popup("Too few letters!")
-    elif len(guess) > 5:
-        sg.popup("Too many letters!")
-    elif not game_handle.is_valid_guess(guess):
-        sg.popup("Not a valid word!")
-    else:
-        draw_word(game_handle.evaluate_guess(guess))
-        if game_handle.is_solution(guess):
-            sg.popup("You got it!")
-        elif game_handle.game_over():
-            sg.popup("Try again!")
-
-
-wordle = WordleGame()
-while True:
-    event, values = window.read()
-    if event is None:
-        break
-    if event == "Reset":
+    def run(self):
+        """Start the Wordle UI."""
         wordle = WordleGame()
-        display_element("")
-    if event == "-IN-":
-        validate_user_input("-IN-")
-    if event == "Submit":
-        handle_submit(values["-IN-"].lower(), wordle)
-        textbox_element("")
-window.close()
+        while True:
+            event, values = self.window.read()
+            if event is None:
+                break
+            if event == "Reset":
+                wordle = WordleGame()
+                self.display_element("")
+            if event == "-IN-":
+                self.validate_user_input("-IN-")
+            if event == "Submit":
+                self.handle_submit(values["-IN-"].lower(), wordle)
+                self.textbox_element("")
+        self.window.close()
+
+
+WordleUI().run()
