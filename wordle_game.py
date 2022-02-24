@@ -138,6 +138,7 @@ class WordleUI:
         ).Finalize()
         self.textbox_element = self.window["-IN-"]
         self.display_element = self.window["-ML-"]
+        self.display_element("")
 
     def draw_letter(self, l, color=Colors.darkGray):
         """Draw a letter to the multiline element with the specified
@@ -159,10 +160,7 @@ class WordleUI:
         """Draw a full word to the multiline element."""
         self.draw_letter(" ", Colors.background)
         for i in word:
-            if len(i) < 2:
-                self.draw_letter(i[0])
-            else:
-                self.draw_letter(i[0], Colors().colormap(i[1]))
+            self.draw_letter(i[0], Colors().colormap(i[1]))
         self.draw_letter(" \n", Colors.background)
 
     def validate_user_input(self, text_element_key):
@@ -194,10 +192,12 @@ class WordleUI:
                 sg.popup("You got it!")
             elif game_handle.game_over():
                 sg.popup("Try again!")
+        self.textbox_element("")
 
     def run(self):
         """Start the Wordle UI."""
         wordle = WordleGame()
+        self.display_element("")
         while True:
             event, values = self.window.read()
             if event is None:
@@ -209,8 +209,32 @@ class WordleUI:
                 self.validate_user_input("-IN-")
             if event == "Submit":
                 self.handle_submit(values["-IN-"].lower(), wordle)
-                self.textbox_element("")
+
         self.window.close()
 
+    def view_game(self, guess_list):
+        """A simple Window to visualize a game."""
+        self.textbox_element("")
+        for word in guess_list:
+            self.draw_word(word)
+        self.window.read()
+        self.run()
 
+
+# test_game = [
+#     [["o", 0], ["r", 1], ["a", 1], ["t", 0], ["e", 1]],
+#     [["s", 0], ["u", 0], ["l", 0], ["c", 0], ["i", 0]],
+#     [["b", 0], ["a", 2], ["r", 2], ["e", 2], ["s", 0]],
+#     [["p", 2], ["a", 2], ["r", 2], ["e", 2], ["d", 0]],
+#     [["p", 2], ["a", 2], ["r", 2], ["e", 2], ["r", 2]],
+# ]
+# test_game = [
+#     [["o", 0], ["r", 0], ["a", 0], ["t", 0], ["e", 0]],
+#     [["s", 0], ["u", 2], ["l", 0], ["c", 1], ["i", 0]],
+#     [["m", 0], ["u", 2], ["s", 0], ["i", 0], ["c", 1]],
+#     [["m", 0], ["u", 2], ["c", 2], ["u", 0], ["s", 0]],
+#     [["d", 2], ["u", 2], ["c", 2], ["h", 2], ["y", 2]],
+# ]
+
+# WordleUI().view_game(test_game)
 WordleUI().run()
