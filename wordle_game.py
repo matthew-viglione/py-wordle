@@ -1,6 +1,17 @@
 """A simple Python implementation of the famous Wordle game."""
 import random
 import PySimpleGUI as sg
+from pymongo import MongoClient
+from solver_and_stats import (
+    contains_at_position,
+    contains_not_at_position,
+    does_not_contain,
+    word_level_score,
+    position_level_score,
+)
+
+client = MongoClient(port=27017)
+db = client.wordle_scores
 
 
 def get_words(filename):
@@ -39,6 +50,7 @@ class WordleGame:
     solution_file = "wordlist_solutions.txt"
     guess_file = "wordlist_guesses.txt"
     valid_guesses = get_words(guess_file)
+    possible_solutions = get_words(solution_file)
     guesses_made = []
     solution = ""
     solution_index = None
@@ -101,11 +113,42 @@ class WordleGame:
         return result
 
 
+def filter_solutions(word, wordlist):
+    """Reduce the possible solutions based on the provided word."""
+    for i, (char, val) in enumerate(word):
+        print(i, val)
+        if val == 2:
+            wordlist = contains_at_position(wordlist, char, i + 1)
+        elif val == 1:
+            wordlist = contains_not_at_position(wordlist, char, i + 1)
+        elif val == 0:
+            wordlist = does_not_contain(wordlist, char)
+    return wordlist
+
+
+def suggest_word(wordlist, method=word_level_score):
+    """Return the next word suggested by the chosen method."""
+    return next(iter(method(wordlist)))
+
+
 class WordleUI:
     """A PySimplGUI UI for a Wordle game."""
 
+    sg.theme("DarkBlack1")
     window = None
     layout = [
+        [
+            sg.Text("What is your name?"),
+            sg.Input(
+                key="-NAME-",
+                size=(21, 1),
+                background_color=Colors.lightGray,
+                default_text="Anonymous",
+            ),
+        ],
+        [
+            sg.Button("Suggest word"),
+        ],
         [
             sg.Text("Guess a word"),
             sg.Input(
@@ -132,7 +175,6 @@ class WordleUI:
     ]
 
     def __init__(self):
-        sg.theme("DarkBlack1")
         self.window = sg.Window(
             "Wordle", self.layout, element_justification="c"
         ).Finalize()
@@ -187,7 +229,8 @@ class WordleUI:
         elif not game_handle.is_valid_guess(guess):
             sg.popup("Not a valid word!")
         else:
-            self.draw_word(game_handle.evaluate_guess(guess))
+            result = game_handle.evaluate_guess(guess)
+            self.draw_word(result)
             if game_handle.is_solution(guess):
                 sg.popup("You got it!")
             elif game_handle.game_over():
@@ -209,7 +252,6 @@ class WordleUI:
                 self.validate_user_input("-IN-")
             if event == "Submit":
                 self.handle_submit(values["-IN-"].lower(), wordle)
-
         self.window.close()
 
     def view_game(self, guess_list):
@@ -221,13 +263,13 @@ class WordleUI:
         self.run()
 
 
-# test_game = [
-#     [["o", 0], ["r", 1], ["a", 1], ["t", 0], ["e", 1]],
-#     [["s", 0], ["u", 0], ["l", 0], ["c", 0], ["i", 0]],
-#     [["b", 0], ["a", 2], ["r", 2], ["e", 2], ["s", 0]],
-#     [["p", 2], ["a", 2], ["r", 2], ["e", 2], ["d", 0]],
-#     [["p", 2], ["a", 2], ["r", 2], ["e", 2], ["r", 2]],
-# ]
+test_game = [
+    [["o", 0], ["r", 1], ["a", 1], ["t", 0], ["e", 1]],
+    [["s", 0], ["u", 0], ["l", 0], ["c", 0], ["i", 0]],
+    [["b", 0], ["a", 2], ["r", 2], ["e", 2], ["s", 0]],
+    [["p", 2], ["a", 2], ["r", 2], ["e", 2], ["d", 0]],
+    [["p", 2], ["a", 2], ["r", 2], ["e", 2], ["r", 2]],
+]
 # test_game = [
 #     [["o", 0], ["r", 0], ["a", 0], ["t", 0], ["e", 0]],
 #     [["s", 0], ["u", 2], ["l", 0], ["c", 1], ["i", 0]],
@@ -236,5 +278,32 @@ class WordleUI:
 #     [["d", 2], ["u", 2], ["c", 2], ["h", 2], ["y", 2]],
 # ]
 
+
+# def solve(wordlist, word, start_word=None, method=word_level_score):
+#     """A simple solver."""
+#     max_guesses = 6
+#     for num in range(1, max_guesses + 1):
+#         if num == 1 and start_word is not None:
+#             guess_word = start_word
+#         else:
+#             guess_word = next(iter(method(wordlist)))
+
+#         # refine the wordlist
+#         for i, char in enumerate(guess_word):
+#             if char == word[i]:
+#                 wordlist = contains_at_position(wordlist, char, i + 1)
+#             elif char in word:
+#                 wordlist = contains_not_at_position(wordlist, char, i + 1)
+#             else:
+#                 wordlist = does_not_contain(wordlist, char)
+#         if word == guess_word:
+#             return num, guess_word
+#     return None, word
+
+
 # WordleUI().view_game(test_game)
 WordleUI().run()
+# sg.theme_previewer()
+
+
+# WordleGame().filter_solutions(test_game[0])
