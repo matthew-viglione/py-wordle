@@ -1,11 +1,13 @@
 """A simple Python implementation of the famous Wordle game."""
 import random
+from timeit import default_timer as timer
 import PySimpleGUI as sg
 from pymongo import MongoClient
 from solver_and_stats import (
     contains_at_position,
     contains_not_at_position,
     does_not_contain,
+    does_not_contain_at_position,
     word_level_score,
     position_level_score,
 )
@@ -57,9 +59,13 @@ class WordleGame:
     enable_solver = False
     game_over = False
 
-    def __init__(self, guesses_made=None, enable_solver=True):
+    def __init__(self, guesses_made=None, enable_solver=True, solution=None):
         """Set up guess list and pick a solution."""
-        self.solution, self.solution_index = self.pick_solution()
+        if solution is None:
+            self.solution, self.solution_index = self.pick_solution()
+        else:
+            self.solution = solution
+            self.solution_index = self.possible_solutions.index(solution)
         if guesses_made:
             self.guesses_made = guesses_made
         else:
@@ -132,22 +138,47 @@ class WordleGame:
             wordlist = self.possible_solutions
         return next(iter(method(wordlist)))
 
-    def solve(self, method=word_level_score):
-        """Solve the game using the provided method."""
+    def solve(self, method=word_level_score, first_guess="later"):
+        """Solve the game using the provided method. Returns the guess
+        list and scores, and whether or not the puzzle was solved.
+
+        Providing a pre-computed first guess that partitions the
+        solution space well can greatly speed up solving. For example,
+        using the basic word level score function without a pre-selected
+        first guess takes 13.53 seconds to solve all possible puzzles.
+        Adding the first guess 'later' (which will always be the same
+        word, depending on the algorithm) sped the time up to 2.15
+        seconds, a 6.3x speedup.
+        """
         while not self.game_is_over():
-            self.evaluate_guess(self.suggest_word(method=method))
-        return self.guesses_made
+            if first_guess is not None and len(self.guesses_made) == 0:
+                self.evaluate_guess(first_guess)
+                first_guess = None
+            else:
+                self.evaluate_guess(self.suggest_word(method=method))
+        return self.guesses_made, self.guesses_made[-1] == self.solution
 
 
-def filter_solutions(word, wordlist):
-    """Reduce the possible solutions based on the provided word."""
-    for i, (char, val) in enumerate(word):
+def filter_solutions(wordscore, wordlist):
+    """Reduce the possible solutions based on the provided wordscore."""
+    for i, (char, val) in enumerate(wordscore):
         if val == 2:
             wordlist = contains_at_position(wordlist, char, i + 1)
         elif val == 1:
             wordlist = contains_not_at_position(wordlist, char, i + 1)
         elif val == 0:
-            wordlist = does_not_contain(wordlist, char)
+            # the following line is safe but inefficient. We can constrain more if we know
+            #  a grey letter is grey in every position
+            wordlist = does_not_contain_at_position(wordlist, char, i + 1)
+            # this following line overconstrains the solution space, eliminating words
+            # that are possible if there was a repeated letter
+            # i.e. a guess that reveals the first 'o' in 'motor' marks
+            # the first green and the second grey
+            # the grey mark would remove all words with an 'o' which is incorrect
+            # wordlist = does_not_contain(wordlist, char)
+            # These words caused problems: ['colon', 'motor', 'baton', 'proxy', 'slosh', 'lowly', 'donor', 'bobby', 'ionic', 'udder', 'lobby', 'crook', 'poppy', 'pupil', 'polyp', 'cross', 'mafia', 'offer', 'datum', 'issue', 'defer', 'chick', 'whiff', 'riper', 'chili', 'knack', 'scoff', 'cease', 'odder', 'gypsy', 'scowl', 'apnea', 'purer', 'flail', 'gross', 'satin', 'carat', 'wooly', 'swash', 'gnash', 'crony', 'rotor', 'goofy', 'quash', 'piece', 'knock']
+            # Blacklist length: 46
+            # Elapsed time: 2.4073149000000003
     return wordlist
 
 
@@ -200,20 +231,18 @@ class WordleUI:
         self.window = sg.Window(
             "Wordle", self.layout, element_justification="c"
         ).Finalize()
-        self.textbox_element = self.window["-IN-"]
-        self.display_element = self.window["-ML-"]
-        self.display_element("")
+        self.window["-ML-"].update("")
 
     def draw_letter(self, l, color=Colors.darkGray):
         """Draw a letter to the multiline element with the specified
         background color.
         """
         if l == "\n":
-            self.display_element.update(
+            self.window["-ML-"].update(
                 "\n", background_color_for_value=Colors.background, append=True
             )
         else:
-            self.display_element.update(
+            self.window["-ML-"].update(
                 l.upper(),
                 text_color_for_value=Colors.white,
                 background_color_for_value=color,
@@ -258,19 +287,19 @@ class WordleUI:
                 sg.popup("You got it!")
             elif game_handle.game_is_over():
                 sg.popup("Try again!")
-        self.textbox_element("")
+        self.window["-IN-"].update("")
 
     def run(self):
         """Start the Wordle UI."""
         wordle = WordleGame(enable_solver=True)
-        self.display_element("")
+        self.window["-ML-"].update("")
         while True:
             event, values = self.window.read()
             if event is None:
                 break
             if event == "Reset":
                 wordle = WordleGame(enable_solver=True)
-                self.display_element("")
+                self.window["-ML-"].update("")
             if event == "-IN-":
                 self.validate_user_input("-IN-")
             if event == "Submit":
@@ -278,17 +307,18 @@ class WordleUI:
             if event == "-CLEAR-":
                 self.window["-IN-"].update("")
             if event == "-SUGGEST-":
-                self.window["-IN-"].update(wordle.suggest_word())
+                self.window["-IN-"](wordle.suggest_word())
             if event == "-SOLVE-":
                 if not wordle.game_is_over():
-                    for word in wordle.solve():
+                    self.window["-ML-"].update("")
+                    for word in wordle.solve()[0]:
                         self.draw_word(word)
 
         self.window.close()
 
     def view_game(self, guess_list):
         """A simple Window to visualize a game."""
-        self.textbox_element("")
+        self.window["-IN-"].update("")
         for word in guess_list:
             self.draw_word(word)
         self.window.read()
@@ -297,3 +327,69 @@ class WordleUI:
 
 if __name__ == "__main__":
     WordleUI().run()
+    # all_solutions = get_words("wordlist_solutions.txt")
+    # blacklist = []
+    # start = timer()
+    # for w in all_solutions:
+    #     try:
+    #         game = WordleGame(enable_solver=True, solution=w)
+    #         print(len(game.solve()))
+    #     except ZeroDivisionError:
+    #         print("Zero division! ", w)
+    #         blacklist.append(w)
+    # end = timer()
+    # print("These words caused problems:", blacklist)
+    # print("Blacklist length:", len(blacklist))
+    # print("Elapsed time:", end - start)
+
+    # blacklist = [
+    #     "colon",
+    #     "motor",
+    #     "baton",
+    #     "proxy",
+    #     "slosh",
+    #     "lowly",
+    #     "donor",
+    #     "bobby",
+    #     "ionic",
+    #     "udder",
+    #     "lobby",
+    #     "crook",
+    #     "poppy",
+    #     "pupil",
+    #     "polyp",
+    #     "cross",
+    #     "mafia",
+    #     "offer",
+    #     "datum",
+    #     "issue",
+    #     "defer",
+    #     "chick",
+    #     "whiff",
+    #     "riper",
+    #     "chili",
+    #     "knack",
+    #     "scoff",
+    #     "cease",
+    #     "odder",
+    #     "gypsy",
+    #     "scowl",
+    #     "apnea",
+    #     "purer",
+    #     "flail",
+    #     "gross",
+    #     "satin",
+    #     "carat",
+    #     "wooly",
+    #     "swash",
+    #     "gnash",
+    #     "crony",
+    #     "rotor",
+    #     "goofy",
+    #     "quash",
+    #     "piece",
+    #     "knock",
+    # ]
+
+    # wordle = WordleGame(enable_solver=True, solution=blacklist[0])
+    # print(len(wordle.solve()))
