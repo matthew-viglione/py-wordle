@@ -55,6 +55,7 @@ class WordleGame:
     solution = ""
     solution_index = None
     enable_solver = False
+    game_over = False
 
     def __init__(self, guesses_made=None, enable_solver=True):
         """Set up guess list and pick a solution."""
@@ -88,11 +89,17 @@ class WordleGame:
             return True
         return False
 
-    def game_over(self):
-        """Return True if user has used all 6 guesses, else False."""
-        if len(self.guesses_made) >= 6:
+    def game_is_over(self):
+        """Return True if user has used all 6 guesses or the game was
+        previously determined to be over, else return False.
+        """
+        if len(self.guesses_made) >= 6 or self.game_over:
             return True
         return False
+
+    def set_game_over(self):
+        """Set the game over flag."""
+        self.game_over = True
 
     def evaluate_guess(self, guess):
         """Return a list representing how the guess matches the
@@ -241,11 +248,13 @@ class WordleUI:
         elif not game_handle.is_valid_guess(guess):
             sg.popup("Not a valid word!")
         else:
-            result = game_handle.evaluate_guess(guess)
-            self.draw_word(result)
+            if not game_handle.game_is_over():
+                result = game_handle.evaluate_guess(guess)
+                self.draw_word(result)
             if game_handle.is_solution(guess):
                 sg.popup("You got it!")
-            elif game_handle.game_over():
+                game_handle.set_game_over()
+            elif game_handle.game_is_over():
                 sg.popup("Try again!")
         self.textbox_element("")
 
@@ -279,47 +288,5 @@ class WordleUI:
         self.run()
 
 
-test_game = [
-    [["o", 0], ["r", 1], ["a", 1], ["t", 0], ["e", 1]],
-    [["s", 0], ["u", 0], ["l", 0], ["c", 0], ["i", 0]],
-    [["b", 0], ["a", 2], ["r", 2], ["e", 2], ["s", 0]],
-    [["p", 2], ["a", 2], ["r", 2], ["e", 2], ["d", 0]],
-    [["p", 2], ["a", 2], ["r", 2], ["e", 2], ["r", 2]],
-]
-# test_game = [
-#     [["o", 0], ["r", 0], ["a", 0], ["t", 0], ["e", 0]],
-#     [["s", 0], ["u", 2], ["l", 0], ["c", 1], ["i", 0]],
-#     [["m", 0], ["u", 2], ["s", 0], ["i", 0], ["c", 1]],
-#     [["m", 0], ["u", 2], ["c", 2], ["u", 0], ["s", 0]],
-#     [["d", 2], ["u", 2], ["c", 2], ["h", 2], ["y", 2]],
-# ]
-
-
-# def solve(wordlist, word, start_word=None, method=word_level_score):
-#     """A simple solver."""
-#     max_guesses = 6
-#     for num in range(1, max_guesses + 1):
-#         if num == 1 and start_word is not None:
-#             guess_word = start_word
-#         else:
-#             guess_word = next(iter(method(wordlist)))
-
-#         # refine the wordlist
-#         for i, char in enumerate(guess_word):
-#             if char == word[i]:
-#                 wordlist = contains_at_position(wordlist, char, i + 1)
-#             elif char in word:
-#                 wordlist = contains_not_at_position(wordlist, char, i + 1)
-#             else:
-#                 wordlist = does_not_contain(wordlist, char)
-#         if word == guess_word:
-#             return num, guess_word
-#     return None, word
-
-
-# WordleUI().view_game(test_game)
-WordleUI().run()
-# sg.theme_previewer()
-
-
-# WordleGame().filter_solutions(test_game[0])
+if __name__ == "__main__":
+    WordleUI().run()
