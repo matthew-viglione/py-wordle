@@ -120,10 +120,23 @@ class WordleGame:
                 result[i][1] = 1
                 count[letter] -= 1
         self.guesses_made.append(result)
-
         if self.enable_solver:
             self.possible_solutions = filter_solutions(result, self.possible_solutions)
+        if len(self.guesses_made) >= 6 or guess == self.solution:
+            self.game_over = True
         return result
+
+    def suggest_word(self, wordlist=None, method=word_level_score):
+        """Return the next word suggested by the chosen method."""
+        if wordlist is None:
+            wordlist = self.possible_solutions
+        return next(iter(method(wordlist)))
+
+    def solve(self, method=word_level_score):
+        """Solve the game using the provided method."""
+        while not self.game_is_over():
+            self.evaluate_guess(self.suggest_word(method=method))
+        return self.guesses_made
 
 
 def filter_solutions(word, wordlist):
@@ -136,11 +149,6 @@ def filter_solutions(word, wordlist):
         elif val == 0:
             wordlist = does_not_contain(wordlist, char)
     return wordlist
-
-
-def suggest_word(wordlist, method=word_level_score):
-    """Return the next word suggested by the chosen method."""
-    return next(iter(method(wordlist)))
 
 
 class WordleUI:
@@ -159,14 +167,9 @@ class WordleUI:
             ),
         ],
         [
-            sg.Button(
-                "Suggest word",
-                key="-SUGGEST-",
-            ),
-            sg.Button(
-                "Clear word",
-                key="-CLEAR-",
-            ),
+            sg.Button("Suggest word", key="-SUGGEST-"),
+            sg.Button("Clear word", key="-CLEAR-"),
+            sg.Button("Solve", key="-SOLVE-"),
         ],
         [
             sg.Text("Guess a word"),
@@ -253,7 +256,6 @@ class WordleUI:
                 self.draw_word(result)
             if game_handle.is_solution(guess):
                 sg.popup("You got it!")
-                game_handle.set_game_over()
             elif game_handle.game_is_over():
                 sg.popup("Try again!")
         self.textbox_element("")
@@ -276,7 +278,12 @@ class WordleUI:
             if event == "-CLEAR-":
                 self.window["-IN-"].update("")
             if event == "-SUGGEST-":
-                self.window["-IN-"].update(suggest_word(wordle.possible_solutions))
+                self.window["-IN-"].update(wordle.suggest_word())
+            if event == "-SOLVE-":
+                if not wordle.game_is_over():
+                    for word in wordle.solve():
+                        self.draw_word(word)
+
         self.window.close()
 
     def view_game(self, guess_list):
