@@ -280,15 +280,26 @@ def does_not_contain(wordlist, letter):
     return result
 
 
+def does_not_contain_at_position(wordlist, letter, position):
+    """Return the words in wordlist that don't contain the specified
+    letter at the specified position. This corresponds to a repeated
+    letter that was marked grey but does exist elsewhere in the word.
+    """
+    result = []
+    for word in wordlist:
+        if letter != word[position - 1]:
+            result.append(word)
+    return result
+
+
 def contains_at_position(wordlist, letter, position):
     """Return the words that have the letter at the specified position.
     This corresponds to a green guess in Wordle.
     """
     result = []
     for word in wordlist:
-        for i, l in enumerate(word):
-            if l == letter and i == position - 1:
-                result.append(word)
+        if word[position - 1] == letter:
+            result.append(word)
     return result
 
 
