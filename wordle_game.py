@@ -54,14 +54,17 @@ class WordleGame:
     guesses_made = []
     solution = ""
     solution_index = None
+    enable_solver = False
 
-    def __init__(self, guesses_made=None):
+    def __init__(self, guesses_made=None, enable_solver=True):
         """Set up guess list and pick a solution."""
         self.solution, self.solution_index = self.pick_solution()
         if guesses_made:
             self.guesses_made = guesses_made
         else:
             self.guesses_made = []
+        if enable_solver:
+            self.enable_solver = True
         print(f"Solution is #{self.solution_index}:'{self.solution}'")
 
     def pick_solution(self, n=None):
@@ -110,13 +113,15 @@ class WordleGame:
                 result[i][1] = 1
                 count[letter] -= 1
         self.guesses_made.append(result)
+
+        if self.enable_solver:
+            self.possible_solutions = filter_solutions(result, self.possible_solutions)
         return result
 
 
 def filter_solutions(word, wordlist):
     """Reduce the possible solutions based on the provided word."""
     for i, (char, val) in enumerate(word):
-        print(i, val)
         if val == 2:
             wordlist = contains_at_position(wordlist, char, i + 1)
         elif val == 1:
@@ -147,7 +152,14 @@ class WordleUI:
             ),
         ],
         [
-            sg.Button("Suggest word"),
+            sg.Button(
+                "Suggest word",
+                key="-SUGGEST-",
+            ),
+            sg.Button(
+                "Clear word",
+                key="-CLEAR-",
+            ),
         ],
         [
             sg.Text("Guess a word"),
@@ -239,19 +251,23 @@ class WordleUI:
 
     def run(self):
         """Start the Wordle UI."""
-        wordle = WordleGame()
+        wordle = WordleGame(enable_solver=True)
         self.display_element("")
         while True:
             event, values = self.window.read()
             if event is None:
                 break
             if event == "Reset":
-                wordle = WordleGame()
+                wordle = WordleGame(enable_solver=True)
                 self.display_element("")
             if event == "-IN-":
                 self.validate_user_input("-IN-")
             if event == "Submit":
                 self.handle_submit(values["-IN-"].lower(), wordle)
+            if event == "-CLEAR-":
+                self.window["-IN-"].update("")
+            if event == "-SUGGEST-":
+                self.window["-IN-"].update(suggest_word(wordle.possible_solutions))
         self.window.close()
 
     def view_game(self, guess_list):
