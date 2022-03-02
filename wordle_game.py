@@ -195,6 +195,7 @@ class WordleGame:
     solution_index = None
     enable_solver = False
     game_over = False
+    solved = False
 
     def __init__(self, guesses_made=None, enable_solver=True, solution=None):
         """Set up guess list and pick a solution."""
@@ -265,8 +266,11 @@ class WordleGame:
         self.guesses_made.append(result)
         if self.enable_solver:
             self.possible_solutions = reduce_solutions(result, self.possible_solutions)
-        if len(self.guesses_made) >= 6 or guess == self.solution:
+        if len(self.guesses_made) >= 6:
             self.game_over = True
+        if guess == self.solution:
+            self.game_over = True
+            self.solved = True
         return result
 
     def suggest_word(self, wordlist=None, method=word_level_score):
@@ -293,7 +297,7 @@ class WordleGame:
                 first_guess = None
             else:
                 self.evaluate_guess(self.suggest_word(method=method))
-        return self.guesses_made, self.guesses_made[-1] == self.solution
+        return self.guesses_made, self.solved
 
 
 class WordleUI:
@@ -446,15 +450,23 @@ if __name__ == "__main__":
 
     # all_solutions = get_words("wordlist_solutions.txt")
     # blacklist = []
+    # unsolved = []
+    # num_guesses = []
     # start = timer()
     # for w in all_solutions:
     #     try:
     #         game = WordleGame(enable_solver=True, solution=w)
-    #         print(len(game.solve()))
+    #         # print(game.solve())
+    #         result, solved = game.solve()
+    #         if not solved:
+    #             unsolved.append(w)
+    #         else:
+    #             num_guesses.append(len(result))
     #     except ZeroDivisionError:
     #         print("Zero division! ", w)
     #         blacklist.append(w)
     # end = timer()
-    # print("These words caused problems:", blacklist)
-    # print("Blacklist length:", len(blacklist))
+    # print(f"Blacklist {len(blacklist)}: {blacklist}")
+    # print(f"Unsolved {len(unsolved)}: {unsolved}")
+    # print(f"Average score: {sum(num_guesses)/len(num_guesses)}")
     # print("Elapsed time:", end - start)
