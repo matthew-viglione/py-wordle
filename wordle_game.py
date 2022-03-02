@@ -1,16 +1,9 @@
 """A simple Python implementation of the famous Wordle game."""
 import random
-from timeit import default_timer as timer
+import string
 import PySimpleGUI as sg
 from pymongo import MongoClient
-from solver_and_stats import (
-    contains_at_position,
-    contains_not_at_position,
-    does_not_contain,
-    does_not_contain_at_position,
-    word_level_score,
-    position_level_score,
-)
+
 
 client = MongoClient(port=27017)
 db = client.wordle_scores
@@ -23,6 +16,161 @@ def get_words(filename):
         for line in file:
             result.append(line.rstrip())
     return result
+
+
+def sort_dict(d, reverse=True):
+    """Return the dictionary sorted by value."""
+    return dict(sorted(d.items(), key=lambda item: item[1], reverse=reverse))
+
+
+def contains(wordlist, letter):
+    """Return a list of words that contain the correct letter."""
+    result = []
+    for word in wordlist:
+        if letter in word:
+            result.append(word)
+    return result
+
+
+def does_not_contain(wordlist, letter):
+    """Return the words in wordlist that don't contain the specified
+    letter. This corresponds to a grey guess in Wordle.
+    """
+    result = []
+    for word in wordlist:
+        if letter not in word:
+            result.append(word)
+    return result
+
+
+def does_not_contain_at_position(wordlist, letter, position):
+    """Return the words in wordlist that don't contain the specified
+    letter at the specified position. This corresponds to a repeated
+    letter that was marked grey but does exist elsewhere in the word.
+    """
+    result = []
+    for word in wordlist:
+        if letter != word[position - 1]:
+            result.append(word)
+    return result
+
+
+def contains_at_position(wordlist, letter, position):
+    """Return the words that have the letter at the specified position.
+    This corresponds to a green guess in Wordle.
+    """
+    result = []
+    for word in wordlist:
+        if word[position - 1] == letter:
+            result.append(word)
+    return result
+
+
+def contains_not_at_position(wordlist, letter, position):
+    """Return the words that have the letter, but not at the specified
+    position. These correspond to yellow guesses in wordle.
+    """
+    result = []
+    wordlist = contains(wordlist, letter)
+    for word in wordlist:
+        if word[position - 1] != letter:
+            result.append(word)
+    return result
+
+
+def get_letter_scores(wordlist):
+    """Return a normalized percent count of each letter. The result is
+    what percent of the words in the wordlist contain at least one of
+    the letter.
+    """
+    counts = dict.fromkeys(string.ascii_lowercase, 0)
+    for w in wordlist:
+        for c in counts:
+            if c in w:
+                counts[c] += 1
+
+    for c in counts:
+        counts[c] = counts[c] / len(wordlist)
+    return counts
+
+
+def get_letter_scores_by_position(wordlist):
+    """Return a normalized percent count of each letter. The result is
+    what percent of the words in the wordlist contain at least one of
+    the letter, separated into positions.
+
+    e.g. : a [0.061, 0.131, 0.133, 0.070, 0.028] means the char 'a'
+    occurs in the first position 6.1% of the time, in the second
+    position 13.1% of the time, etc.
+    """
+    scores = dict.fromkeys(string.ascii_lowercase)
+    for char in scores:
+        scores[char] = [0, 0, 0, 0, 0]
+    for word in wordlist:
+        for i, char in enumerate(word):
+            scores[char][i] += 1
+    for char in scores:
+        for i, score in enumerate(scores[char]):
+            scores[char][i] = score / len(wordlist)
+    return scores
+
+
+def position_level_score(wordlist):
+    """Calculate a score for each word, using scores that are aware of
+    positions.
+    """
+    char_frequency = get_letter_scores_by_position(wordlist)
+    result = {}
+    for word in wordlist:
+        this_score = 0
+        for i, c in enumerate(word):
+            this_score += char_frequency[c][i]
+        result[word] = this_score
+    return sort_dict(result, reverse=True)
+
+
+def word_level_score(wordlist):
+    """Give a score to each word. Each letter adds the % chance it has
+    of occuring in a word to the score for the whole word.
+    """
+    scores = get_letter_scores(wordlist)
+    result = {}
+    for w in wordlist:
+        this_score = 0
+        for char in scores:
+            if char in w:
+                this_score += scores[char]
+        result[w] = this_score
+    return sort_dict(result, reverse=True)
+
+
+def reduce_solutions(wordscore, wordlist):
+    """Reduce the possible solutions based on the provided wordscore."""
+    for i, (char, val) in enumerate(wordscore):
+        if val == 2:
+            wordlist = contains_at_position(wordlist, char, i + 1)
+        elif val == 1:
+            wordlist = contains_not_at_position(wordlist, char, i + 1)
+        elif val == 0:
+            # the following line is safe but inefficient. We can constrain more if we know
+            #  a grey letter is grey in every position
+            wordlist = does_not_contain_at_position(wordlist, char, i + 1)
+            # this following line overconstrains the solution space, eliminating words
+            # that are possible if there was a repeated letter
+            # i.e. a guess that reveals the first 'o' in 'motor' marks
+            # the first green and the second grey
+            # the grey mark would remove all words with an 'o' which is incorrect
+            # wordlist = does_not_contain(wordlist, char)
+            # These words caused problems: ['colon', 'motor', 'baton', 'proxy', 'slosh',
+            #    'lowly', 'donor', 'bobby', 'ionic', 'udder', 'lobby', 'crook', 'poppy',
+            #    'pupil', 'polyp', 'cross', 'mafia', 'offer', 'datum', 'issue', 'defer',
+            #    'chick', 'whiff', 'riper', 'chili', 'knack', 'scoff', 'cease', 'odder',
+            #    'gypsy', 'scowl', 'apnea', 'purer', 'flail', 'gross', 'satin', 'carat',
+            #    'wooly', 'swash', 'gnash', 'crony', 'rotor', 'goofy', 'quash', 'piece',
+            #    'knock']
+            # Blacklist length: 46
+            # Elapsed time: 2.4073149000000003
+    return wordlist
 
 
 class Colors:
@@ -49,8 +197,8 @@ class Colors:
 class WordleGame:
     """A class representing a Wordle game."""
 
-    solution_file = "wordlist_solutions.txt"
     guess_file = "wordlist_guesses.txt"
+    solution_file = "wordlist_solutions.txt"
     valid_guesses = get_words(guess_file)
     possible_solutions = get_words(solution_file)
     guesses_made = []
@@ -127,7 +275,7 @@ class WordleGame:
                 count[letter] -= 1
         self.guesses_made.append(result)
         if self.enable_solver:
-            self.possible_solutions = filter_solutions(result, self.possible_solutions)
+            self.possible_solutions = reduce_solutions(result, self.possible_solutions)
         if len(self.guesses_made) >= 6 or guess == self.solution:
             self.game_over = True
         return result
@@ -157,29 +305,6 @@ class WordleGame:
             else:
                 self.evaluate_guess(self.suggest_word(method=method))
         return self.guesses_made, self.guesses_made[-1] == self.solution
-
-
-def filter_solutions(wordscore, wordlist):
-    """Reduce the possible solutions based on the provided wordscore."""
-    for i, (char, val) in enumerate(wordscore):
-        if val == 2:
-            wordlist = contains_at_position(wordlist, char, i + 1)
-        elif val == 1:
-            wordlist = contains_not_at_position(wordlist, char, i + 1)
-        elif val == 0:
-            # the following line is safe but inefficient. We can constrain more if we know
-            #  a grey letter is grey in every position
-            wordlist = does_not_contain_at_position(wordlist, char, i + 1)
-            # this following line overconstrains the solution space, eliminating words
-            # that are possible if there was a repeated letter
-            # i.e. a guess that reveals the first 'o' in 'motor' marks
-            # the first green and the second grey
-            # the grey mark would remove all words with an 'o' which is incorrect
-            # wordlist = does_not_contain(wordlist, char)
-            # These words caused problems: ['colon', 'motor', 'baton', 'proxy', 'slosh', 'lowly', 'donor', 'bobby', 'ionic', 'udder', 'lobby', 'crook', 'poppy', 'pupil', 'polyp', 'cross', 'mafia', 'offer', 'datum', 'issue', 'defer', 'chick', 'whiff', 'riper', 'chili', 'knack', 'scoff', 'cease', 'odder', 'gypsy', 'scowl', 'apnea', 'purer', 'flail', 'gross', 'satin', 'carat', 'wooly', 'swash', 'gnash', 'crony', 'rotor', 'goofy', 'quash', 'piece', 'knock']
-            # Blacklist length: 46
-            # Elapsed time: 2.4073149000000003
-    return wordlist
 
 
 class WordleUI:
@@ -327,6 +452,8 @@ class WordleUI:
 
 if __name__ == "__main__":
     WordleUI().run()
+
+    # from timeit import default_timer as timer
     # all_solutions = get_words("wordlist_solutions.txt")
     # blacklist = []
     # start = timer()
@@ -341,55 +468,3 @@ if __name__ == "__main__":
     # print("These words caused problems:", blacklist)
     # print("Blacklist length:", len(blacklist))
     # print("Elapsed time:", end - start)
-
-    # blacklist = [
-    #     "colon",
-    #     "motor",
-    #     "baton",
-    #     "proxy",
-    #     "slosh",
-    #     "lowly",
-    #     "donor",
-    #     "bobby",
-    #     "ionic",
-    #     "udder",
-    #     "lobby",
-    #     "crook",
-    #     "poppy",
-    #     "pupil",
-    #     "polyp",
-    #     "cross",
-    #     "mafia",
-    #     "offer",
-    #     "datum",
-    #     "issue",
-    #     "defer",
-    #     "chick",
-    #     "whiff",
-    #     "riper",
-    #     "chili",
-    #     "knack",
-    #     "scoff",
-    #     "cease",
-    #     "odder",
-    #     "gypsy",
-    #     "scowl",
-    #     "apnea",
-    #     "purer",
-    #     "flail",
-    #     "gross",
-    #     "satin",
-    #     "carat",
-    #     "wooly",
-    #     "swash",
-    #     "gnash",
-    #     "crony",
-    #     "rotor",
-    #     "goofy",
-    #     "quash",
-    #     "piece",
-    #     "knock",
-    # ]
-
-    # wordle = WordleGame(enable_solver=True, solution=blacklist[0])
-    # print(len(wordle.solve()))
