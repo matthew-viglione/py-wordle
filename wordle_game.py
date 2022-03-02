@@ -146,30 +146,19 @@ def word_level_score(wordlist):
 
 def reduce_solutions(wordscore, wordlist):
     """Reduce the possible solutions based on the provided wordscore."""
+    char_count = {i[0]: 0 for i in wordscore}
+    for char, _ in wordscore:
+        char_count[char] += 1
     for i, (char, val) in enumerate(wordscore):
         if val == 2:
             wordlist = contains_at_position(wordlist, char, i + 1)
         elif val == 1:
             wordlist = contains_not_at_position(wordlist, char, i + 1)
         elif val == 0:
-            # the following line is safe but inefficient. We can constrain more if we know
-            #  a grey letter is grey in every position
-            wordlist = does_not_contain_at_position(wordlist, char, i + 1)
-            # this following line overconstrains the solution space, eliminating words
-            # that are possible if there was a repeated letter
-            # i.e. a guess that reveals the first 'o' in 'motor' marks
-            # the first green and the second grey
-            # the grey mark would remove all words with an 'o' which is incorrect
-            # wordlist = does_not_contain(wordlist, char)
-            # These words caused problems: ['colon', 'motor', 'baton', 'proxy', 'slosh',
-            #    'lowly', 'donor', 'bobby', 'ionic', 'udder', 'lobby', 'crook', 'poppy',
-            #    'pupil', 'polyp', 'cross', 'mafia', 'offer', 'datum', 'issue', 'defer',
-            #    'chick', 'whiff', 'riper', 'chili', 'knack', 'scoff', 'cease', 'odder',
-            #    'gypsy', 'scowl', 'apnea', 'purer', 'flail', 'gross', 'satin', 'carat',
-            #    'wooly', 'swash', 'gnash', 'crony', 'rotor', 'goofy', 'quash', 'piece',
-            #    'knock']
-            # Blacklist length: 46
-            # Elapsed time: 2.4073149000000003
+            if char_count[char] > 1:
+                wordlist = does_not_contain_at_position(wordlist, char, i + 1)
+            else:
+                wordlist = does_not_contain(wordlist, char)
     return wordlist
 
 
@@ -454,6 +443,7 @@ if __name__ == "__main__":
     WordleUI().run()
 
     # from timeit import default_timer as timer
+
     # all_solutions = get_words("wordlist_solutions.txt")
     # blacklist = []
     # start = timer()
