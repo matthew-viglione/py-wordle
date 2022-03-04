@@ -2,11 +2,6 @@
 import random
 import string
 import PySimpleGUI as sg
-from pymongo import MongoClient
-
-
-client = MongoClient(port=27017)
-db = client.wordle_scores
 
 
 def get_words(filename):
@@ -210,7 +205,7 @@ class WordleGame:
             self.guesses_made = []
         if enable_solver:
             self.enable_solver = True
-        print(f"Solution is #{self.solution_index}:'{self.solution}'")
+        # print(f"Solution is #{self.solution_index}:'{self.solution}'")
 
     def pick_solution(self, n=None):
         """Return the solution word, or a random solution if no index
@@ -307,20 +302,6 @@ class WordleUI:
     window = None
     layout = [
         [
-            sg.Text("What is your name?"),
-            sg.Input(
-                key="-NAME-",
-                size=(21, 1),
-                background_color=Colors.lightGray,
-                default_text="Anonymous",
-            ),
-        ],
-        [
-            sg.Button("Suggest word", key="-SUGGEST-"),
-            sg.Button("Clear word", key="-CLEAR-"),
-            sg.Button("Solve", key="-SOLVE-"),
-        ],
-        [
             sg.Text("Guess a word"),
             sg.Input(
                 key="-IN-",
@@ -328,7 +309,12 @@ class WordleUI:
                 background_color=Colors.lightGray,
                 enable_events=True,
             ),
+            sg.Button("Clear", key="-CLEAR-"),
             sg.Button("Submit", disabled=False, bind_return_key=True),
+        ],
+        [
+            sg.Button("Suggest word", key="-SUGGEST-"),
+            sg.Button("Solve", key="-SOLVE-"),
             sg.Button("Reset"),
         ],
         [
@@ -409,7 +395,7 @@ class WordleUI:
 
     def run(self):
         """Start the Wordle UI."""
-        wordle = WordleGame(enable_solver=True)
+        wordle = WordleGame(enable_solver=True, solution="rupee")
         self.window["-ML-"].update("")
         while True:
             event, values = self.window.read()
@@ -443,30 +429,68 @@ class WordleUI:
         self.run()
 
 
+def run_solver_benchmarks():
+    """Solve all possible puzzles and print some statistics."""
+
+    from timeit import default_timer as timer
+
+    all_solutions = get_words("wordlist_solutions.txt")
+    blacklist = []
+    unsolved = []
+    num_guesses = []
+    start = timer()
+    for w in all_solutions:
+        try:
+            game = WordleGame(enable_solver=True, solution=w)
+            # print(game.solve())
+            result, solved = game.solve()
+            if not solved:
+                unsolved.append(w)
+            else:
+                num_guesses.append(len(result))
+        except ZeroDivisionError:
+            print("Zero division! ", w)
+            blacklist.append(w)
+    end = timer()
+    print(f"Blacklist {len(blacklist)}: {blacklist}")
+    print(f"Unsolved {len(unsolved)}: {unsolved}")
+    print(f"Average score: {sum(num_guesses)/len(num_guesses)}")
+    print(f"Elapsed time: {end - start}")
+
+
+def manual_solver():
+    """Use this to solve Wordle games in progress."""
+
+    def print_scores(score_dict, num=15000):
+        """Print out all the scores with highest score first."""
+        print(f"Count: {len(score_dict)}")
+        for i, (k, v) in enumerate(score_dict.items()):
+            if i < num:
+                print(k, v)
+
+    words = get_words("wordlist_solutions.txt")
+
+    words = does_not_contain(words, "o")
+    words = does_not_contain(words, "r")
+    words = contains_not_at_position(words, "a", 3)
+    words = contains_at_position(words, "t", 4)
+    words = does_not_contain(words, "e")
+
+    words = does_not_contain(words, "s")
+    words = contains_at_position(words, "u", 2)
+    words = does_not_contain(words, "l")
+    words = does_not_contain(words, "c")
+    words = does_not_contain(words, "i")
+
+    words = contains_not_at_position(words, "p", 1)
+    words = does_not_contain(words, "g")
+    words = contains_not_at_position(words, "r", 3)
+
+    print("\nWord level suggestions:")
+    print_scores(word_level_score(words), num=30)
+
+
 if __name__ == "__main__":
     WordleUI().run()
-
-    # from timeit import default_timer as timer
-
-    # all_solutions = get_words("wordlist_solutions.txt")
-    # blacklist = []
-    # unsolved = []
-    # num_guesses = []
-    # start = timer()
-    # for w in all_solutions:
-    #     try:
-    #         game = WordleGame(enable_solver=True, solution=w)
-    #         # print(game.solve())
-    #         result, solved = game.solve()
-    #         if not solved:
-    #             unsolved.append(w)
-    #         else:
-    #             num_guesses.append(len(result))
-    #     except ZeroDivisionError:
-    #         print("Zero division! ", w)
-    #         blacklist.append(w)
-    # end = timer()
-    # print(f"Blacklist {len(blacklist)}: {blacklist}")
-    # print(f"Unsolved {len(unsolved)}: {unsolved}")
-    # print(f"Average score: {sum(num_guesses)/len(num_guesses)}")
-    # print("Elapsed time:", end - start)
+    # run_solver_benchmarks()
+    # manual_solver()
