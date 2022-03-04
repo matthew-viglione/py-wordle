@@ -89,7 +89,6 @@ def print_score_distribution(collection):
         {
             "$group": {
                 "_id": "$score",
-                # "score": {"$score"},
                 "count": {"$sum": 1},
             }
         },
@@ -110,8 +109,7 @@ def print_failed_solutions(collection):
         {"$match": {"solved": False}},
         {"$group": {"_id": "$solution"}},
     ]
-    for r in collection.aggregate(pipeline):
-        print(f"   {r['_id']}")
+    print([r["_id"] for r in collection.aggregate(pipeline)])
 
 
 if __name__ == "__main__":
