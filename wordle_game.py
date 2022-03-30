@@ -395,7 +395,7 @@ class WordleUI:
 
     def run(self):
         """Start the Wordle UI."""
-        wordle = WordleGame(enable_solver=True, solution="rupee")
+        wordle = WordleGame(enable_solver=True)
         self.window["-ML-"].update("")
         while True:
             event, values = self.window.read()
@@ -458,6 +458,16 @@ def run_solver_benchmarks():
     print(f"Elapsed time: {end - start}")
 
 
+def make_score(word, score):
+    """Return a wordscore list from two strings that can be used by the
+    solver's reduce function.
+
+    e.g. word='later' and score='21011' would give
+        [['l', 2], ['a', 1], ['t', 0], ['e', 1], ['r', 1]]
+    """
+    return [[l, int(s)] for l, s in zip(word, score)]
+
+
 def manual_solver():
     """Use this to solve Wordle games in progress."""
 
@@ -470,21 +480,7 @@ def manual_solver():
 
     words = get_words("wordlist_solutions.txt")
 
-    words = does_not_contain(words, "o")
-    words = does_not_contain(words, "r")
-    words = contains_not_at_position(words, "a", 3)
-    words = contains_at_position(words, "t", 4)
-    words = does_not_contain(words, "e")
-
-    words = does_not_contain(words, "s")
-    words = contains_at_position(words, "u", 2)
-    words = does_not_contain(words, "l")
-    words = does_not_contain(words, "c")
-    words = does_not_contain(words, "i")
-
-    words = contains_not_at_position(words, "p", 1)
-    words = does_not_contain(words, "g")
-    words = contains_not_at_position(words, "r", 3)
+    words = reduce_solutions(make_score("orate", "10012"), words)
 
     print("\nWord level suggestions:")
     print_scores(word_level_score(words), num=30)
