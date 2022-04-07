@@ -468,7 +468,7 @@ def make_score(word, score):
     return [[l, int(s)] for l, s in zip(word, score)]
 
 
-def manual_solver():
+def manual_solver(guesses):
     """Use this to solve Wordle games in progress."""
 
     def print_scores(score_dict, num=15000):
@@ -479,14 +479,23 @@ def manual_solver():
                 print(k, v)
 
     words = get_words("wordlist_solutions.txt")
-
-    words = reduce_solutions(make_score("orate", "10012"), words)
-
-    print("\nWord level suggestions:")
-    print_scores(word_level_score(words), num=30)
+    for guess in guesses:
+        words = reduce_solutions(make_score(guess[0], guess[1]), words)
+    print("Word level suggestions:")
+    print_scores(word_level_score(words), num=5)
 
 
 if __name__ == "__main__":
-    WordleUI().run()
+    # WordleUI().run()
     # run_solver_benchmarks()
-    # manual_solver()
+
+    guess_list = [
+        [
+            ("orate", "01201"),
+            ("sulci", "00000"),
+        ]
+    ]
+
+    for i, g in enumerate(guess_list):
+        print(f"----------------Puzzle {i+1}----------------")
+        manual_solver(g)
